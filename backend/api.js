@@ -124,6 +124,19 @@ module.exports.login_post = async (req, res) => {
     });
 }
 
+module.exports.get_favourites = async (req, res, next) => {
+  const { user_id } = req.params;
+  try {
+    const user = await User.findById(user_id);
+    const favouritePosts = await Post.find({
+      _id: { $in: user.favourites }
+    }).sort({ created_at: -1 });
+    res.json(favouritePosts);
+  } catch (error) {
+    res.json({ error: error });
+  }
+};
+
 module.exports.get_users = async (req, res, next) => {
     try{
       const users = await User.find()
@@ -157,6 +170,51 @@ module.exports.update_user = async (req, res, next) => {
     }
 };
 
+module.exports.add_image = async (req, res, next) => {
+  try{
+    let { user_id } = req.params;
+
+    // read the image data from the request body
+    const { image } = req.body;
+
+    // update the user object to include the image
+    const filter = {_id: user_id};
+    const update = {$set: {image: image}};
+    const options = {new: true};
+    const updated = await User.updateOne(filter, update, options);
+
+    if (updated.nModified === 0) {
+      return res.status(404).send({error: "user not found in the db"});
+    }
+
+    return res.status(201).send({image: image});
+  } catch(err) {
+    res.status(500).send({error: err.message});
+  }
+};
+
+module.exports.add_bio = async (req, res, next) => {
+  try{
+    let { user_id } = req.params;
+
+    const { bio } = req.body;
+
+    // update the user object to include the bio
+    const filter = {_id: user_id};
+    const update = {$set: {bio: bio}};
+    const options = {new: true};
+    const updated = await User.updateOne(filter, update, options);
+
+    if (updated.nModified === 0) {
+      return res.status(404).send({error: "user not found in the db"});
+    }
+
+    return res.status(201).send({bio: bio});
+  } catch(err) {
+    res.status(500).send({error: err.message});
+  }
+};
+
 module.exports.delete_user = async (req, res, next) => {
     try{
         let { user_id } = req.params;
@@ -179,16 +237,60 @@ module.exports.follow_user = async (req, res, next) => {
 
   try {
     const user = await User.findById(user_id);
+    const follower = await User.findById(follower_id);
     if (!user) {
       res.status(404).send('User not found');
       return;
     }
+    if (!follower) {
+      res.status(404).send('Follower not found');
+      return;
+    }
     user.followers.push(follower_id);
+    follower.followings.push(user_id);
     await user.save();
+    await follower.save();
     res.send('User followed successfully');
   } catch (err) {
     console.error(err);
     res.status(500).send('Error following user');
+  }
+};
+
+// Unfollow a user
+module.exports.unfollow_user = async (req, res, next) => {
+  const { user_id } = req.params;
+  const { follower_id } = req.body;
+
+  try {
+    const user = await User.findById(user_id);
+    const follower = await User.findById(follower_id);
+    if (!user) {
+      res.status(404).send('User not found');
+      return;
+    }
+    if (!follower) {
+      res.status(404).send('Follower not found');
+      return;
+    }
+    const index = user.followers.indexOf(follower_id);
+    const indexFollowing = follower.followings.indexOf(user_id);
+    if (index === -1) {
+      res.status(400).send('Follower has not followed this user');
+      return;
+    }
+    if (indexFollowing === -1) {
+      res.status(400).send('Follower has not followed this user');
+      return;
+    }
+    user.followers.splice(index, 1);
+    follower.followings.splice(indexFollowing, 1);
+    await user.save();
+    await follower.save();
+    res.send('Follower unfollowed successfully');
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Error unfollowing user');
   }
 };
 
@@ -214,6 +316,29 @@ module.exports.get_followers = async (req, res, next) => {
 };
 
 
+// See all followings
+module.exports.get_followings = async (req, res, next) => {
+  const { user_id } = req.params;
+
+  try {
+    const user = await User.findById(user_id);
+    if (!user) {
+      res.status(404).send('User not found');
+      return;
+    }
+
+    const followingsIds = user.followings;
+    const followings = await User.find({ _id: { $in: followingsIds } });
+
+    res.send(followings);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Error finding followings');
+  }
+};
+
+
+
 // See all tweets
 module.exports.get_tweets = async (req, res, next) => {
   try {
@@ -224,6 +349,19 @@ module.exports.get_tweets = async (req, res, next) => {
     res.status(500).send('Error finding posts');
   }
 };
+
+// See all tweets by user
+module.exports.get_tweets_by_user = async (req, res, next) => {
+  const { user_id } = req.params;
+  try {
+    const posts = await Post.find({ user_id: user_id }).exec();
+    res.send(posts);
+  } catch (error) {
+    console.error(error);
+    res.status(500).send('Error finding posts');
+  }
+};
+
 
 // Add new post
 module.exports.add_post = async (req, res, next) => {
@@ -238,9 +376,169 @@ module.exports.add_post = async (req, res, next) => {
   }
 };
 
+// Add a post to Favourites
+module.exports.add_to_favourites = async (req, res, next) => {
+  const { post_id } = req.params;
+  const { user_id } = req.body;
+  try {
+    const user = await User.findById(user_id);
+    if (!user) {
+      res.status(404).send('User not found');
+      return;
+    }
+    user.favourites.push(post_id);
+    await user.save();
+    res.send('Post added to favourites successfully');
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Error adding post to Favourites');
+  }
+};
+
+// Delete a post from Favourites
+module.exports.delete_from_favourites = async (req, res, next) => {
+  const { post_id } = req.params;
+  const { user_id } = req.body;
+  try {
+    const user = await User.findById(user_id);
+    if (!user) {
+      res.status(404).send('User not found');
+      return;
+    }
+
+    const index = user.favourites.indexOf(post_id);
+    if (index === -1) {
+      res.status(400).send('User has not added this post to favourites');
+      return;
+    }
+
+    user.favourites.splice(index, 1);
+    await user.save();
+    res.send('Post deleted successfully from favourites');
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Error deleting post from Favourites');
+  }
+};
+
+
+// Like a post
+module.exports.like_post = async (req, res, next) => {
+  const { post_id } = req.params;
+  const { user_id } = req.body;
+
+  try {
+    const post = await Post.findById(post_id);
+    const user = await User.findById(user_id);
+    if (!post) {
+      res.status(404).send('Post not found');
+      return;
+    }
+    post.likes.push(user_id);
+
+    // update the likes received for the user
+    var filter = {_id: post.user_id};
+    var update = { $inc: { likesreceived: 1 } };
+    var options = {new: true};
+    var updated = await User.updateOne(filter, update, options);
+
+    // update the likes given for the user
+    var filter = {_id: user_id};
+    var update = { $inc: { likesgiven: 1 } };
+    var options = {new: true};
+    var updated = await User.updateOne(filter, update, options);
+    
+    await post.save();
+
+    res.send('Post liked successfully');
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Error liking post');
+  }
+};
+
+// Unlike a post
+module.exports.unlike_post = async (req, res, next) => {
+  const { post_id } = req.params;
+  const { user_id } = req.body;
+
+  try {
+    const post = await Post.findById(post_id);
+    if (!post) {
+      res.status(404).send('Post not found');
+      return;
+    }
+    const index = post.likes.indexOf(user_id);
+    if (index === -1) {
+      res.status(400).send('User has not liked this post');
+      return;
+    }
+
+    // update the likes received for the user
+    var filter = {_id: post.user_id};
+    var update = { $inc: { likesreceived: -1 } };
+    var options = {new: true};
+    var updated = await User.updateOne(filter, update, options);
+
+    // update the likes received for the user
+    var filter = {_id: user_id};
+    var update = { $inc: { likesgiven: -1 } };
+    var options = {new: true};
+    var updated = await User.updateOne(filter, update, options);
+
+    post.likes.splice(index, 1);
+    await post.save();
+    res.send('Post unliked successfully');
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Error unliking post');
+  }
+};
+
+// Delete a post
+module.exports.delete_post = async(req, res, next) => {
+  const { post_id } = req.params;
+  try {
+    await Post.findByIdAndDelete(post_id); // Find and delete the post by post_id
+    res.send('Post deleted successfully');
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Error deleting post');
+  }
+}
+
+// Delete a comment
+module.exports.delete_comment = async(req, res, next) => {
+  const { post_id, comment_id } = req.params;
+  try {
+    const post = await Post.findById(post_id);
+    if (!post) {
+      return res.status(404).json({ msg: 'Post not found' });
+    }
+
+    // Find the comment by its ID
+    const comment = post.comments.find(comment => comment.id === comment_id);
+
+    if (!comment) {
+      return res.status(404).json({ msg: 'Comment not found' });
+    }
+    
+    // Remove the comment from the post's comments array
+    post.comments = post.comments.filter(comment => comment.id !== comment_id);
+    await post.save();
+
+    res.send('Comment deleted successfully');
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Server Error');
+  }
+}
+
+
 // Commenting on a post
 module.exports.post_comment = async (req, res, next) => {
-  const { user_id, comment } = req.body;
+  const { user_id, full_name, comment } = req.body;
   const { post_id } = req.params;
 
   try {
@@ -251,6 +549,31 @@ module.exports.post_comment = async (req, res, next) => {
 
     post.comments.push({
       user_id: user_id,
+      full_name: full_name,
+      comment: comment
+    });
+
+    await post.save();
+    res.send('Comment saved successfully');
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Error saving comment');
+  }
+};
+
+// Get number of following for a user
+module.exports.get_following = async (req, res, next) => {
+  const { user_id } = req.params;
+
+  try {
+    const post = await Post.findById(post_id);
+    if (!post) {
+      return res.status(404).send('Post not found');
+    }
+
+    post.comments.push({
+      user_id: user_id,
+      full_name: full_name,
       comment: comment
     });
 

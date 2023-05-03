@@ -1,15 +1,22 @@
 var mongoose = require('mongoose');
 var { isEmail } = require('validator');
+const User = require('./User');
 
 var postSchema = new mongoose.Schema(
     {
         user_id: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+        user_full_name: { type: String },
         content: { type: String, required: true },
         comments: {
             type: [{
                 user_id: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+                full_name: { type: String, required: true },
                 comment: { type: String, required: true }
             }],
+            default: []
+        },
+        likes: {
+            type: [String], 
             default: []
         },
         created_at: {
@@ -31,8 +38,10 @@ postSchema.virtual('id').get(function() {
 postSchema.set('toJSON', {virtuals: true});
 
 // fire a function before doc saved to db (hash the password)
-postSchema.pre('save', function(next){
+postSchema.pre('save', async function(next){
     var currentDate = new Date();
+    const user = await User.findById(this.user_id);
+    this.user_full_name = `${user.firstname} ${user.lastname}`;
     this.updated_at = currentDate;
     if (!this.created_at){
         this.created_at = currentDate

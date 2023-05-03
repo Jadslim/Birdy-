@@ -14,6 +14,24 @@ var userSchema = new mongoose.Schema(
             type: [String], 
             default: []
         },
+        followings: {
+            type: [String], 
+            default: []
+        },
+        image: {
+            type: String,
+            default: ""
+        },
+        bio: {
+            type: String,
+            default: ""
+        },
+        favourites: {
+            type: [String],
+            default: []  
+        },
+        likesgiven: { type: Number, default: 0 },
+        likesreceived: { type: Number, default: 0 },
         created_at: {
             type: Date, 
             default: Date.Now

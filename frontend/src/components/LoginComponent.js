@@ -42,7 +42,9 @@ export default function LoginComponent() {
             alert("Wrong creds!")
         }
       }
-    
+    const handleRegister = () => {
+        navigate('/register')
+    }
     return (
         <Container>
             <Box sx={{
@@ -62,6 +64,7 @@ export default function LoginComponent() {
                     <TextField type="password" onChange={(e) => setPassword(e.target.value)} id="outlined-basic" label="Password" variant="outlined" fullWidth margin="normal"/>
                     {/* <FormControlLabel control={<Checkbox defaultChecked />} label="Remember me" /> */}
                     <Button variant="contained" sx={{mt: 2}} fullWidth onClick={loginUser} >Sign In</Button>
+                    <Button color="success" variant="contained" sx={{mt: 2}} fullWidth onClick={handleRegister} >Sign Up</Button>
                 </Box>
 
             </Box>
